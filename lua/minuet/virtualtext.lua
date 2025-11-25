@@ -22,6 +22,26 @@ local internal = {
     current_completion_timestamp = 0,
 }
 
+---@param ft? string filetype to check (defaults to current buffer's filetype)
+---@return boolean whether auto-trigger should be enabled for the given filetype
+local function is_auto_trigger_enabled_for_ft(ft)
+    local config = require('minuet').config
+    ft = ft or vim.bo.ft
+
+    if #config.virtualtext.auto_trigger_ft == 0 then
+        return false
+    end
+
+    if vim.tbl_contains(config.virtualtext.auto_trigger_ft, '*') or
+       vim.tbl_contains(config.virtualtext.auto_trigger_ft, ft) then
+        if not vim.tbl_contains(config.virtualtext.auto_trigger_ignore_ft, ft) then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function should_auto_trigger()
     return vim.b.minuet_virtual_text_auto_trigger
 end
@@ -385,6 +405,11 @@ function autocmd.on_insert_enter()
 end
 
 function autocmd.on_buf_enter()
+    -- Initialize auto_trigger for this buffer if not already set
+    if vim.b.minuet_virtual_text_auto_trigger == nil then
+        vim.b.minuet_virtual_text_auto_trigger = is_auto_trigger_enabled_for_ft()
+    end
+
     if vim.fn.mode():match '^[iR]' then
         autocmd.on_insert_enter()
     end
@@ -511,13 +536,17 @@ function M.setup()
         api.nvim_create_autocmd('FileType', {
             pattern = config.virtualtext.auto_trigger_ft,
             callback = function()
-                if not vim.tbl_contains(config.virtualtext.auto_trigger_ignore_ft, vim.bo.ft) then
-                    vim.b.minuet_virtual_text_auto_trigger = true
-                end
+                vim.b.minuet_virtual_text_auto_trigger = is_auto_trigger_enabled_for_ft()
             end,
             group = M.augroup,
             desc = 'minuet virtual text filetype auto trigger',
         })
+
+        -- Initialize auto_trigger for current buffer if it matches the pattern
+        vim.b.minuet_virtual_text_auto_trigger = is_auto_trigger_enabled_for_ft()
+    else
+        -- Explicitly disable auto_trigger when auto_trigger_ft is empty
+        vim.b.minuet_virtual_text_auto_trigger = false
     end
 
     create_autocmds()
